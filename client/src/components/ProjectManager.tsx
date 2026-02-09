@@ -376,67 +376,67 @@ export function ProjectManager() {
 
   return (
     <>
-      <div className="absolute top-4 right-4 z-20 flex flex-wrap items-center gap-2">
-        {activeProject ? (
-          <Input
-            value={projectName}
-            onChange={(event) => setProjectName(event.target.value)}
-            onBlur={handleProjectNameCommit}
-            onKeyDown={handleProjectNameKeyDown}
-            className="h-9 w-48 bg-background/80 shadow-lg"
-            aria-label="Название проекта"
+      <div className="absolute top-4 right-4 z-20 flex flex-col items-end gap-1">
+        <div className="flex flex-wrap items-center gap-2">
+          {activeProject ? (
+            <Input
+              value={projectName}
+              onChange={(event) => setProjectName(event.target.value)}
+              onBlur={handleProjectNameCommit}
+              onKeyDown={handleProjectNameKeyDown}
+              className="h-9 w-48 bg-background/80 shadow-lg"
+              aria-label="Название проекта"
+            />
+          ) : null}
+          <Button 
+            size="sm" 
+            onClick={handleSave}
+            className="shadow-lg"
+          >
+            <Save className="w-4 h-4 mr-2" />
+            Сохранить
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                size="sm"
+                variant="secondary"
+                className="shadow-lg"
+                aria-label="Меню проектов"
+              >
+                <Menu className="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setIsOpen(true)}>
+                <FolderOpen className="w-4 h-4 mr-2" />
+                Проекты
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportJson}>
+                <FileJson className="w-4 h-4 mr-2" />
+                Экспорт JSON
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportObj}>
+                <Download className="w-4 h-4 mr-2" />
+                Экспорт OBJ
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => importInputRef.current?.click()}>
+                <Upload className="w-4 h-4 mr-2" />
+                Импорт
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <input
+            ref={importInputRef}
+            type="file"
+            accept=".obj,application/json,.json"
+            className="hidden"
+            onChange={handleImportFile}
           />
-        ) : null}
+        </div>
         {activeProject && lastSavedLabel ? (
-          <span className="rounded-md bg-background/80 px-2 py-1 text-xs text-muted-foreground shadow-lg">
-            {lastSavedLabel}
-          </span>
+          <span className="text-xs text-muted-foreground">{lastSavedLabel}</span>
         ) : null}
-        <Button 
-          size="sm" 
-          onClick={handleSave}
-          className="shadow-lg"
-        >
-          <Save className="w-4 h-4 mr-2" />
-          Сохранить
-        </Button>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              size="sm"
-              variant="secondary"
-              className="shadow-lg"
-              aria-label="Меню проектов"
-            >
-              <Menu className="w-4 h-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => setIsOpen(true)}>
-              <FolderOpen className="w-4 h-4 mr-2" />
-              Проекты
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportJson}>
-              <FileJson className="w-4 h-4 mr-2" />
-              Экспорт JSON
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleExportObj}>
-              <Download className="w-4 h-4 mr-2" />
-              Экспорт OBJ
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => importInputRef.current?.click()}>
-              <Upload className="w-4 h-4 mr-2" />
-              Импорт
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <input
-          ref={importInputRef}
-          type="file"
-          accept=".obj,application/json,.json"
-          className="hidden"
-          onChange={handleImportFile}
-        />
       </div>
 
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
