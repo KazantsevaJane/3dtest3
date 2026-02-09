@@ -79,7 +79,7 @@ export default function Editor() {
     <div className="h-screen w-screen flex flex-col bg-background text-foreground overflow-hidden">
       <Toolbar />
       <div className="flex-1 flex overflow-hidden">
-        <div className="flex-1 relative">
+        <div className="flex-1 min-w-0 relative">
           <ProjectManager />
           <Suspense fallback={
             <div className="w-full h-full flex items-center justify-center bg-[#111]">

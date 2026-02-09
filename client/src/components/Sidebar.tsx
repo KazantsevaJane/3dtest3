@@ -150,7 +150,7 @@ export function Sidebar() {
   };
 
   return (
-    <div className="w-80 border-l bg-card flex flex-col shrink-0">
+    <div className="w-[min(20rem,45vw)] border-l bg-card flex flex-col shrink-0">
       {/* Scene Graph */}
       <div className="flex-1 flex flex-col min-h-0">
         <div className="p-4 border-b">
