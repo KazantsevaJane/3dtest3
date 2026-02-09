@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react';
+import type { ChangeEvent, KeyboardEvent } from 'react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useEditorStore, type SceneElement } from '@/lib/store';
 import {
@@ -8,14 +8,21 @@ import {
   importProjectExport,
   parseProjectExport,
   updateStoredProject,
+  updateStoredProjectName,
   type StoredProject,
 } from '@/lib/project-storage';
 import { useToast } from '@/hooks/use-toast';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Download, FileJson, FolderOpen, Plus, Save, Upload } from 'lucide-react';
+import { Download, FileJson, FolderOpen, Plus, Save, Upload, ChevronDown } from 'lucide-react';
 import * as THREE from 'three';
 import { OBJExporter } from 'three/examples/jsm/exporters/OBJExporter.js';
 import { OBJLoader } from 'three/examples/jsm/loaders/OBJLoader.js';
@@ -26,6 +33,7 @@ export function ProjectManager() {
   const [newProjectName, setNewProjectName] = useState('');
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [projects, setProjects] = useState<StoredProject[]>([]);
+  const [projectName, setProjectName] = useState('');
   
   const elements = useEditorStore(state => state.elements);
   const loadScene = useEditorStore(state => state.loadScene);
@@ -33,6 +41,8 @@ export function ProjectManager() {
   const addObjElement = useEditorStore(state => state.addObjElement);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
+  const elementsRef = useRef(elements);
+  const activeProjectIdRef = useRef(activeProjectId);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -43,6 +53,32 @@ export function ProjectManager() {
     () => projects.find((project) => project.id === activeProjectId) ?? null,
     [projects, activeProjectId]
   );
+
+  useEffect(() => {
+    elementsRef.current = elements;
+  }, [elements]);
+
+  useEffect(() => {
+    activeProjectIdRef.current = activeProjectId;
+  }, [activeProjectId]);
+
+  useEffect(() => {
+    setProjectName(activeProject?.name ?? '');
+  }, [activeProject?.name]);
+
+  useEffect(() => {
+    if (!activeProjectId) return;
+    const interval = window.setInterval(() => {
+      const id = activeProjectIdRef.current;
+      if (!id) return;
+      const updated = updateStoredProject(id, elementsRef.current);
+      if (updated) {
+        setProjects(getStoredProjects());
+      }
+    }, 20000);
+
+    return () => window.clearInterval(interval);
+  }, [activeProjectId]);
 
   const buildExportScene = () => {
     const scene = new THREE.Scene();
@@ -172,9 +208,29 @@ export function ProjectManager() {
   };
 
   const handleLoad = (project: StoredProject) => {
+    if (activeProjectId && activeProjectId !== project.id) {
+      const updated = updateStoredProject(activeProjectId, elements);
+      if (updated) {
+        setProjects(getStoredProjects());
+      }
+    }
     setActiveProjectId(project.id);
     loadScene(project.elements);
     setIsOpen(false);
+  };
+
+  const handleProjectNameCommit = () => {
+    if (!activeProjectId) return;
+    const updated = updateStoredProjectName(activeProjectId, projectName);
+    if (updated) {
+      setProjects(getStoredProjects());
+    }
+  };
+
+  const handleProjectNameKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Enter') {
+      event.currentTarget.blur();
+    }
   };
 
   const handleExportObj = () => {
@@ -250,7 +306,17 @@ export function ProjectManager() {
 
   return (
     <>
-      <div className="absolute top-4 right-4 z-20 flex gap-2">
+      <div className="absolute top-4 right-4 z-20 flex flex-wrap items-center gap-2">
+        {activeProject ? (
+          <Input
+            value={projectName}
+            onChange={(event) => setProjectName(event.target.value)}
+            onBlur={handleProjectNameCommit}
+            onKeyDown={handleProjectNameKeyDown}
+            className="h-9 w-48 bg-background/80 shadow-lg"
+            aria-label="Название проекта"
+          />
+        ) : null}
         <Button 
           variant="secondary" 
           size="sm" 
@@ -268,42 +334,32 @@ export function ProjectManager() {
           <Save className="w-4 h-4 mr-2" />
           Сохранить
         </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={handleExportJson}
-          className="shadow-lg"
-        >
-          <FileJson className="w-4 h-4 mr-2" />
-          Экспорт JSON
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => jsonInputRef.current?.click()}
-          className="shadow-lg"
-        >
-          <Upload className="w-4 h-4 mr-2" />
-          Импорт JSON
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={handleExportObj}
-          className="shadow-lg"
-        >
-          <Download className="w-4 h-4 mr-2" />
-          Экспорт OBJ
-        </Button>
-        <Button
-          size="sm"
-          variant="secondary"
-          onClick={() => fileInputRef.current?.click()}
-          className="shadow-lg"
-        >
-          <Upload className="w-4 h-4 mr-2" />
-          Импорт OBJ
-        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button size="sm" variant="secondary" className="shadow-lg">
+              Экспорт/импорт
+              <ChevronDown className="w-4 h-4 ml-2" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={handleExportJson}>
+              <FileJson className="w-4 h-4 mr-2" />
+              Экспорт JSON
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => jsonInputRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-2" />
+              Импорт JSON
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={handleExportObj}>
+              <Download className="w-4 h-4 mr-2" />
+              Экспорт OBJ
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => fileInputRef.current?.click()}>
+              <Upload className="w-4 h-4 mr-2" />
+              Импорт OBJ
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <input
           ref={fileInputRef}
           type="file"

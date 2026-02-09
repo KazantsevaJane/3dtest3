@@ -94,6 +94,22 @@ export const updateStoredProject = (
   return updated;
 };
 
+export const updateStoredProjectName = (id: string, name: string): StoredProject | null => {
+  const projects = readProjects();
+  const index = projects.findIndex((project) => project.id === id);
+  if (index === -1) return null;
+
+  const updated: StoredProject = {
+    ...projects[index],
+    name: name.trim() || 'Безымянный проект',
+    updatedAt: new Date().toISOString(),
+  };
+  const next = [...projects];
+  next[index] = updated;
+  writeProjects(next);
+  return updated;
+};
+
 export const buildProjectExport = (project: {
   name: string;
   elements: Record<string, SceneElement>;
