@@ -49,6 +49,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
   const allElements = useEditorStore(state => state.elements);
   const [isTransforming, setIsTransforming] = React.useState(false);
   const ghostRef = useRef<THREE.Group>(null!);
+  const ghostOpacity = 0.4;
   const effectiveOpacity = inheritedOpacity;
   
   const isSelected = selection.includes(id);
@@ -304,40 +305,149 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
     }
   };
 
+  const buildGeometry = React.useCallback((el: SceneElement): THREE.BufferGeometry | null => {
+    switch (el.type) {
+      case 'box': {
+        const radius = Math.max(0, Math.min(el.cornerRadius ?? 0, 0.5));
+        return radius > 0 ? new RoundedBoxGeometry(1, 1, 1, 2, radius) : new THREE.BoxGeometry(1, 1, 1);
+      }
+      case 'sphere':
+        return new THREE.SphereGeometry(1, 32, 16);
+      case 'cylinder':
+        return new THREE.CylinderGeometry(1, 1, 1, 32);
+      case 'torus': {
+        const tube = Math.max(0.05, Math.min(el.torusThickness ?? 0.3, 0.95));
+        return new THREE.TorusGeometry(1, tube, 16, 32);
+      }
+      case 'cone':
+        return new THREE.ConeGeometry(1, 1.4, 32);
+      case 'pyramid':
+        return new THREE.ConeGeometry(1, 1.4, 4);
+      default:
+        return null;
+    }
+  }, []);
+
+  const buildGhostObject = React.useCallback((el: SceneElement): THREE.Object3D | null => {
+    switch (el.type) {
+      case 'group': {
+        const group = new THREE.Group();
+        Object.values(allElements)
+          .filter(child => child.parentId === el.id)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          .forEach((child) => {
+            const childObj = buildGhostObject(child);
+            if (!childObj) return;
+            childObj.position.set(child.position[0], child.position[1], child.position[2]);
+            childObj.rotation.set(child.rotation[0], child.rotation[1], child.rotation[2]);
+            childObj.scale.set(child.scale[0], child.scale[1], child.scale[2]);
+            group.add(childObj);
+          });
+        return group;
+      }
+      case 'mesh': {
+        if (!el.objData) return null;
+        const loader = new OBJLoader();
+        const obj = loader.parse(el.objData);
+        const color = new THREE.Color(el.color);
+        obj.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            mesh.material = new THREE.MeshStandardMaterial({
+              color,
+              transparent: true,
+              opacity: ghostOpacity,
+              depthWrite: false,
+              emissive: color,
+              emissiveIntensity: 0.5,
+            });
+            mesh.castShadow = true;
+            mesh.receiveShadow = true;
+          }
+        });
+        return obj;
+      }
+      case 'subtraction': {
+        const children = Object.values(allElements)
+          .filter(child => child.parentId === el.id)
+          .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+        const baseEl = children[0];
+        if (!baseEl) return null;
+        const baseObj = buildGhostObject(baseEl);
+        if (!baseObj) return null;
+        baseObj.position.set(baseEl.position[0], baseEl.position[1], baseEl.position[2]);
+        baseObj.rotation.set(baseEl.rotation[0], baseEl.rotation[1], baseEl.rotation[2]);
+        baseObj.scale.set(baseEl.scale[0], baseEl.scale[1], baseEl.scale[2]);
+        const group = new THREE.Group();
+        group.add(baseObj);
+        return group;
+      }
+      case 'box':
+      case 'sphere':
+      case 'cylinder':
+      case 'torus':
+      case 'cone':
+      case 'pyramid': {
+        const geometry = buildGeometry(el);
+        if (!geometry) return null;
+        return new THREE.Mesh(
+          geometry,
+          new THREE.MeshStandardMaterial({
+            color: el.color,
+            transparent: true,
+            opacity: ghostOpacity,
+            depthWrite: false,
+            emissive: new THREE.Color(el.color),
+            emissiveIntensity: 0.5,
+          }),
+        );
+      }
+      default:
+        return null;
+    }
+  }, [allElements, buildGeometry, ghostOpacity]);
+
   const GhostPreview = () => (
     <group ref={ghostRef} position={element.position} rotation={element.rotation} scale={element.scale}>
-      <mesh>
-        {element.type === 'subtraction' ? (
-          <Geometry>
-            {childIds.length === 2 && (() => {
-              const baseEl = allElements[childIds[0]];
-              const subEl = allElements[childIds[1]];
-              return (
-                <>
-                  <Base position={baseEl.position} rotation={baseEl.rotation} scale={baseEl.scale}>
-                    {renderGeometry(baseEl)}
-                  </Base>
-                  <Subtraction position={subEl.position} rotation={subEl.rotation} scale={subEl.scale}>
-                    {renderGeometry(subEl)}
-                  </Subtraction>
-                </>
-              );
-            })()}
-          </Geometry>
-        ) : element.type === 'mesh' && ghostMeshObject ? (
-          <primitive object={ghostMeshObject} />
-        ) : (
-          renderGeometry(element)
-        )}
-        <meshStandardMaterial 
-          color={element.color} 
-          transparent 
-          opacity={0.4} 
-          depthWrite={false}
-          emissive={element.color}
-          emissiveIntensity={0.5}
-        />
-      </mesh>
+      {element.type === 'group' ? (
+        (() => {
+          const ghostGroupObject = buildGhostObject(element);
+          return ghostGroupObject ? <primitive object={ghostGroupObject} /> : null;
+        })()
+      ) : (
+        <mesh>
+          {element.type === 'subtraction' ? (
+            <Geometry>
+              {childIds.length === 2 && (() => {
+                const baseEl = allElements[childIds[0]];
+                const subEl = allElements[childIds[1]];
+                return (
+                  <>
+                    <Base position={baseEl.position} rotation={baseEl.rotation} scale={baseEl.scale}>
+                      {renderGeometry(baseEl)}
+                    </Base>
+                    <Subtraction position={subEl.position} rotation={subEl.rotation} scale={subEl.scale}>
+                      {renderGeometry(subEl)}
+                    </Subtraction>
+                  </>
+                );
+              })()}
+            </Geometry>
+          ) : element.type === 'mesh' && ghostMeshObject ? (
+            <primitive object={ghostMeshObject} />
+          ) : (
+            renderGeometry(element)
+          )}
+          <meshStandardMaterial 
+            color={element.color} 
+            transparent 
+            opacity={ghostOpacity} 
+            depthWrite={false}
+            emissive={element.color}
+            emissiveIntensity={0.5}
+          />
+        </mesh>
+      )}
     </group>
   );
 
@@ -350,8 +460,8 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
 
     return (
       <>
-        <group {...commonProps}>
-          <mesh visible={!isTransforming}>
+        <group {...commonProps} visible={!isTransforming}>
+          <mesh>
             <Geometry>
               <Base 
                 position={baseEl.position} 
@@ -382,6 +492,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
             scale={element.scale}
           />
         )}
+        {isSelected && isTransforming && <GhostPreview />}
       </>
     );
   }
@@ -389,7 +500,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
   if (element.type === 'group') {
     return (
       <>
-        <group {...commonProps}>
+        <group {...commonProps} visible={!isTransforming}>
           {childIds.map(childId => (
             <RecursiveElement
               key={childId}
@@ -409,6 +520,7 @@ const RecursiveElement = ({ id, inheritedOpacity = 1 }: { id: string; inheritedO
             scale={element.scale}
           />
         )}
+        {isSelected && isTransforming && <GhostPreview />}
       </>
     );
   }
